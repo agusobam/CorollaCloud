@@ -1,0 +1,411 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CorollaCloud</title>
+
+<style>
+body{
+    font-family:system-ui,sans-serif;
+    margin:0;
+    background:#111;
+    color:#eee;
+}
+
+main{
+    max-width:720px;
+    margin:auto;
+    padding:18px;
+}
+
+.card{
+    background:#1b1b1b;
+    border-radius:16px;
+    padding:16px;
+    margin:12px 0;
+}
+
+input,
+button{
+    font:inherit;
+    width:100%;
+    box-sizing:border-box;
+    margin-top:8px;
+    padding:12px;
+    border-radius:10px;
+    border:1px solid #444;
+    background:#222;
+    color:#eee;
+}
+
+button{
+    background:#eee;
+    color:#111;
+    font-weight:700;
+}
+
+.grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:10px;
+}
+
+pre{
+    white-space:pre-wrap;
+    word-break:break-word;
+    font-size:12px;
+    background:#0b0b0b;
+    padding:12px;
+    border-radius:10px;
+}
+
+.small{
+    opacity:.7;
+    font-size:13px;
+}
+</style>
+</head>
+
+<body>
+
+<main>
+
+<h1>CorollaCloud</h1>
+
+<div class="small">
+Eksperimen HEVC cloud — v0.1
+</div>
+
+<div class="card">
+
+<label>Video sumber</label>
+
+<input
+    id="file"
+    type="file"
+    accept="video/*"
+>
+
+<button onclick="uploadAndRun()">
+UPLOAD + MULAI TES
+</button>
+
+<div
+    id="status"
+    class="small"
+></div>
+
+</div>
+
+<div class="card">
+
+<h3>Parameter</h3>
+
+<div class="grid">
+
+<div>
+<label>Bitrate</label>
+<input
+    id="bitrate"
+    value="733k"
+>
+</div>
+
+<div>
+<label>Durasi tes (detik)</label>
+<input
+    id="duration"
+    type="number"
+    value="6"
+>
+</div>
+
+<div>
+<label>B-frame</label>
+<input
+    id="bframes"
+    type="number"
+    value="4"
+>
+</div>
+
+<div>
+<label>b-adapt</label>
+<input
+    id="badapt"
+    type="number"
+    value="0"
+>
+</div>
+
+<div>
+<label>b-pyramid</label>
+<input
+    id="bpyramid"
+    type="number"
+    value="0"
+>
+</div>
+
+<div>
+<label>refs</label>
+<input
+    id="ref"
+    type="number"
+    value="1"
+>
+</div>
+
+<div>
+<label>keyint</label>
+<input
+    id="keyint"
+    type="number"
+    value="184"
+>
+</div>
+
+<div>
+<label>scenecut</label>
+<input
+    id="scenecut"
+    type="number"
+    value="0"
+>
+</div>
+
+</div>
+
+</div>
+
+<div class="card">
+
+<h3>Hasil</h3>
+
+<pre id="result">
+Belum ada job.
+</pre>
+
+</div>
+
+</main>
+
+<script>
+
+async function uploadAndRun(){
+
+    const file =
+        document
+        .getElementById("file")
+        .files[0];
+
+    if(!file){
+
+        alert(
+            "Pilih video dulu"
+        );
+
+        return;
+    }
+
+    const status =
+        document
+        .getElementById("status");
+
+    status.textContent =
+        "Upload...";
+
+    const form =
+        new FormData();
+
+    form.append(
+        "file",
+        file
+    );
+
+    const upload =
+        await fetch(
+            "/api/upload",
+            {
+                method:"POST",
+                body:form
+            }
+        );
+
+    if(!upload.ok){
+
+        status.textContent =
+            await upload.text();
+
+        return;
+    }
+
+    const uploaded =
+        await upload.json();
+
+    status.textContent =
+        "Mulai eksperimen...";
+
+    const config = {
+
+        encoder:"libx265",
+
+        bitrate:
+            document
+            .getElementById(
+                "bitrate"
+            ).value,
+
+        duration:
+            +document
+            .getElementById(
+                "duration"
+            ).value,
+
+        bframes:
+            +document
+            .getElementById(
+                "bframes"
+            ).value,
+
+        b_adapt:
+            +document
+            .getElementById(
+                "badapt"
+            ).value,
+
+        b_pyramid:
+            +document
+            .getElementById(
+                "bpyramid"
+            ).value,
+
+        ref:
+            +document
+            .getElementById(
+                "ref"
+            ).value,
+
+        keyint:
+            +document
+            .getElementById(
+                "keyint"
+            ).value,
+
+        scenecut:
+            +document
+            .getElementById(
+                "scenecut"
+            ).value
+    };
+
+    const response =
+        await fetch(
+            "/api/experiment/"
+            +
+            uploaded.file_id,
+            {
+                method:"POST",
+
+                headers:{
+                    "Content-Type":
+                        "application/json"
+                },
+
+                body:
+                    JSON.stringify(
+                        config
+                    )
+            }
+        );
+
+    if(!response.ok){
+
+        status.textContent =
+            await response.text();
+
+        return;
+    }
+
+    const job =
+        await response.json();
+
+    pollJob(
+        job.job_id
+    );
+}
+
+
+async function pollJob(
+    jobId
+){
+
+    const status =
+        document
+        .getElementById(
+            "status"
+        );
+
+    const result =
+        document
+        .getElementById(
+            "result"
+        );
+
+    const response =
+        await fetch(
+            "/api/jobs/"
+            +
+            jobId
+        );
+
+    const job =
+        await response.json();
+
+    status.textContent =
+        job.message
+        ||
+        job.status;
+
+    result.textContent =
+        JSON.stringify(
+            job,
+            null,
+            2
+        );
+
+    if(
+        job.status === "queued"
+        ||
+        job.status === "running"
+    ){
+
+        setTimeout(
+            function(){
+
+                pollJob(
+                    jobId
+                );
+
+            },
+            2000
+        );
+    }
+
+    else if(
+        job.status === "done"
+    ){
+
+        result.textContent +=
+            "\n\nDOWNLOAD:\n"
+            +
+            location.origin
+            +
+            job.result_url;
+    }
+}
+
+</script>
+
+</body>
+  </html>
